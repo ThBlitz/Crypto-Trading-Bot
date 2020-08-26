@@ -1,6 +1,6 @@
 import time
 import os
-import pandas as pd
+
 ####################################################################################################################
 ###  CLEAN CODE ### MINIMUM ERRORS ###
 
@@ -17,6 +17,7 @@ class Price_Ticker:
     def __init__(self,unique_name='none'):
         self.id=f'price_ticker_{__id__()}'
         self.name=unique_name
+        self.save_feedback = False
 
     def set(self,options,tick_rate=1.0,_yield_=True):
         self.options=options
@@ -45,6 +46,13 @@ class Price_Ticker:
     def load(self,save_obj,name):
         info=save_obj.load(name,self.id)
         self.restore(info)
+
+    def record_feedback(self,feedback_obj=None):
+        if feedback_obj==None:
+            self.save_feedback=False
+        else:
+            self.save_feedback=True
+            self.feed=feedback_obj
 
     def run(self):
         if self.tick_rate < 0.1:
@@ -84,12 +92,16 @@ class Price_Ticker:
                 loop_took = time.time() - last_time
                 self.feedback.update({'time':time.time()})
                 self.feedback.update({'loop_took':loop_took})
+
+                if self.save_feedback==True:
+                    self.feed.push(self.feedback)
+
                 if self._yield_==False:
                     break
 
-                yield return_price,self.feedback
+                yield return_price
 
-            return return_price, self.feedback
+            return return_price
 
         except:
             pass
@@ -107,6 +119,7 @@ class Account_info:
         self.name=unique_name
         self.type=['SPOT']
         self.id= f'account_info_{__id__()}'
+        self.save_feedback = False
 
     def set(self,options,keys):
         self.options=options
@@ -135,6 +148,13 @@ class Account_info:
         info=save_obj.load(name,self.id)
         self.restore(info)
 
+    def record_feedback(self,feedback_obj=None):
+        if feedback_obj==None:
+            self.save_feedback=False
+        else:
+            self.save_feedback=True
+            self.feed=feedback_obj
+
     def run(self):
         last_time = time.time()
         self.feedback = {}
@@ -155,7 +175,10 @@ class Account_info:
         loop_took=time.time()-last_time
         self.feedback.update({'loop_took':loop_took})
 
-        return self.assets,self.feedback
+        if self.save_feedback==True:
+            self.feed.push(self.feedback)
+
+        return self.assets
 
 ####################################################################################################################
 
@@ -173,11 +196,10 @@ class Place_Order():
         self.id=f'place_order_{__id__()}'
         self.name=unique_name
         self.trade_type = None
-        self.option = None
-        self.keys=None
+        self.save_feedback = False
 
-    def set(self,trade_type,option,keys):
-        self.option=option
+    def set(self,trade_type,options,keys):
+        self.options=options
         self.trade_type=trade_type
         self.keys=keys
 
@@ -185,7 +207,7 @@ class Place_Order():
         return {
             'name':self.name,
             'id':self.id,
-            'options':self.option,
+            'options':self.options,
             'trade_type':self.trade_type,
             'keys':self.keys
         }
@@ -193,7 +215,7 @@ class Place_Order():
     def restore(self,info):
         self.name=info['name']
         self.id=info['id']
-        self.option=info['options']
+        self.options=info['options']
         self.trade_type=info['trade_type']
         self.keys=info['keys']
 
@@ -204,13 +226,22 @@ class Place_Order():
         info=save_obj.load(name,self.id)
         self.restore(info)
 
-    def run(self,BUY_or_SELL=None,quantity=0.001,price=None):
+    def record_feedback(self,feedback_obj=None):
+        if feedback_obj==None:
+            self.save_feedback=False
+        else:
+            self.save_feedback=True
+            self.feed=feedback_obj
+
+    def run(self,assetA_assetB,quantity,BUY_or_SELL,precision,price=None):
         last_time=time.time()
+        assetA_assetB=assetA_assetB.split('_')
+        self.assetA_and_assetB=assetA_assetB[0]+assetA_assetB[1]
         self.price=price
         self.feedback={}
         self.info_={}
 
-        for option in self.option:
+        for option in self.options:
             exec(f'import {option}')
 
         if self.price==None:
@@ -218,36 +249,44 @@ class Place_Order():
 
         if self.trade_type == 'market_order':
             self.price=None
-            for option in self.option:
-                for symbol in self.option[option]:
-                    self.order_id=[f'market_order_id_{__id__()}']
-                    symbol=[symbol]
-                    self.quantity=[quantity]
-                    self.BUY_or_SELL=[BUY_or_SELL]
-                    self.api_key = [self.keys[f'{option}'][f'api_key']]
-                    self.secret_key = [self.keys[f'{option}'][f'secret_key']]
-                    info=eval(f'{option}.PlaceNewMarketOrder({symbol},{self.BUY_or_SELL},{self.quantity},{self.order_id},{self.api_key},{self.secret_key})')
-                    self.info_.update({f'{option}': {symbol[0]:info}})
+            for option in self.options:
+                symbol=self.assetA_and_assetB
+                self.order_id=[f'market_order_id_{__id__()}']
+                symbol=[symbol]
+                if isinstance(quantity,float):
+                    self.quantity=[round(quantity,precision)]
+                elif isinstance(quantity[option],float):
+                    self.quantity=[round(quantity[option],precision)]
+                else:
+                    print('ERROR_AT_PLACE_ORDER')
+                self.BUY_or_SELL=[BUY_or_SELL]
+                self.api_key = [self.keys[f'{option}'][f'api_key']]
+                self.secret_key = [self.keys[f'{option}'][f'secret_key']]
+                info=eval(f'{option}.PlaceNewMarketOrder({symbol},{self.BUY_or_SELL},{self.quantity},{self.order_id},{self.api_key},{self.secret_key})')
+                self.info_.update({f'{option}': {symbol[0]:info}})
 
         elif self.trade_type == 'limit_order':
-            for option in self.option:
-                for symbol in self.option[option]:
-                    self.order_id=[f'limit_order_id_{__id__()}']
-                    symbol = [symbol]
-                    self.quantity = [quantity]
-                    self.BUY_or_SELL = [BUY_or_SELL]
-                    self.api_key = [self.keys[f'{option}'][f'api_key']]
-                    self.secret_key = [self.keys[f'{option}'][f'secret_key']]
-                    info=eval(f'{option}.PlaceNewLimitOrder({symbol},{self.BUY_or_SELL},{self.quantity},{self.price},{self.order_id},{self.api_key},{self.secret_key})')
-                    self.info_.update({f'{option}': {symbol[0]: info}})
+            for option in self.options:
+                symbol=self.assetA_and_assetB
+                self.order_id=[f'limit_order_id_{__id__()}']
+                symbol = [symbol]
+                self.quantity = [quantity]
+                self.BUY_or_SELL = [BUY_or_SELL]
+                self.api_key = [self.keys[f'{option}'][f'api_key']]
+                self.secret_key = [self.keys[f'{option}'][f'secret_key']]
+                info=eval(f'{option}.PlaceNewLimitOrder({symbol},{self.BUY_or_SELL},{self.quantity},{self.price},{self.order_id},{self.api_key},{self.secret_key})')
+                self.info_.update({f'{option}': {symbol[0]: info}})
 
         self.feedback.update({'id':self.id})
-        self.feedback.update({'options':self.option})
+        self.feedback.update({'options':self.options})
         self.feedback.update({'trade_type':self.trade_type})
         loop_took=time.time()-last_time
         self.feedback.update({'loop_took':loop_took})
 
-        return self.info_ , self.feedback
+        if self.save_feedback==True:
+            self.feed.push(self.feedback)
+
+        return self.info_
 
 # option={
 #     'HeyBinance':{'BTCUSDT'}
@@ -257,27 +296,25 @@ class Place_Order():
 #     'HeyBinance':{ 'api_key': '12345','secret_key': '12345556'}
 # }
 
-class Check_Order:
+class Manage_Order:
     def __init__(self,unique_name='name'):
         self.name=unique_name
         self.id = f'check_order_{__id__()}'
+        self.save_feedback = False
 
-    def set(self,option,keys):
-        self.option=option
+    def set(self,keys):
         self.keys=keys
 
     def info(self):
         return {
             'name':self.name,
             'id':self.id,
-            'options':self.option,
             'keys':self.keys
         }
 
     def restore(self, info):
         self.name = info['name']
         self.id = info['id']
-        self.option = info['options']
         self.keys = info['keys']
 
     def save(self, save_obj):
@@ -287,84 +324,68 @@ class Check_Order:
         info = save_obj.load(name, self.id)
         self.restore(info)
 
-    def run(self,place_order_output):
+    def record_feedback(self,feedback_obj=None):
+        if feedback_obj==None:
+            self.save_feedback=False
+        else:
+            self.save_feedback=True
+            self.feed=feedback_obj
+
+    def run_check_order(self,place_order_output):
         last_time=time.time()
         self.feedback={}
-        for option in self.option:
+        for option in place_order_output:
             exec(f'import {option}')
 
         self.info_={}
 
-        for option in self.option:
-            asset_to_get=place_order_output[option]
-            for symbol in self.option[option]:
-                _info=asset_to_get[symbol]
+        for option in place_order_output:
+            self.info_.update({option:{}})
+            for symbol in place_order_output[option]:
+                _info=place_order_output[option][symbol]
                 self.order_id=[_info['order_id']]
                 self.symbol=[symbol]
                 self.api_key = [self.keys[f'{option}'][f'api_key']]
                 self.secret_key = [self.keys[f'{option}'][f'secret_key']]
                 info=eval(f'{option}.CheckOrderStatus({self.symbol},{self.order_id},{self.api_key},{self.secret_key})')
-                self.info_.update({f'{option}': {symbol: info}})
+                self.info_[option].update({symbol: info})
 
-            self.feedback.update({'id':self.id})
-            self.feedback.update({'options':self.option})
-            loop_took=time.time()-last_time
-            self.feedback.update({'loop_took':loop_took})
-            return self.info_,self.feedback
+        self.feedback.update({'id':self.id})
+        loop_took=time.time()-last_time
+        self.feedback.update({'loop_took':loop_took})
 
-class Cancel_Order:
-    def __init__(self,unique_name='none'):
-        self.name=unique_name
-        self.id = f'cancel_order_{__id__()}'
+        if self.save_feedback==True:
+            self.feed.push(self.feedback)
 
-    def set(self, option, keys):
-        self.option = option
-        self.keys = keys
+        return self.info_
 
-    def info(self):
-        return {
-            'id': self.id,
-            'options': self.option,
-            'keys': self.keys
-        }
-
-    def restore(self, info):
-        self.name = info['name']
-        self.id = info['id']
-        self.option = info['options']
-        self.keys = info['keys']
-
-    def save(self, save_obj):
-        save_obj.save(self.info(), self.name)
-
-    def load(self, save_obj, name):
-        info = save_obj.load(name, self.id)
-        self.restore(info)
-
-    def run(self, place_order_output):
+    def run_cancel_order(self, place_order_output):
         last_time = time.time()
         self.feedback = {}
-        for option in self.option:
+        for option in place_order_output:
             exec(f'import {option}')
 
         self.info_ = {}
 
-        for option in self.option:
-            asset_to_get = place_order_output[option]
-            for symbol in self.option[option]:
-                _info = asset_to_get[symbol]
+        for option in place_order_output:
+            self.info_.update({option:{}})
+            for symbol in place_order_output[option]:
+                _info = place_order_output[option][symbol]
                 self.order_id = [_info['order_id']]
                 self.symbol = [symbol]
                 self.api_key = [self.keys[f'{option}'][f'api_key']]
                 self.secret_key = [self.keys[f'{option}'][f'secret_key']]
                 info=eval(f'{option}.CancelaOrder({self.symbol},{self.order_id},{self.api_key},{self.secret_key})')
-                self.info_.update({f'{option}': {symbol: info}})
+                self.info_[option].update({symbol: info})
 
         self.feedback.update({'id': self.id})
-        self.feedback.update({'options': self.option})
         loop_took = time.time() - last_time
         self.feedback.update({'loop_took': loop_took})
-        return self.info_, self.feedback
+
+        if self.save_feedback==True:
+            self.feed.push(self.feedback)
+
+        return self.info_
 
 # options={
 #     'HeyBinance':{
@@ -436,6 +457,7 @@ class Candle_Sticks_Ticker:
     def __init__(self,unique_name='none'):
         self.name=unique_name
         self.id=f'candle_stick_ticker_{__id__()}'
+        self.save_feedback = False
         self.intervalsinmilli = {'1m': 1 * 60 * 1000, '3m': 3 * 60 * 1000, '5m': 5 * 60 * 1000, '15m': 15 * 60 * 1000,
                         '30m': 30 * 60 * 1000, '1h': 1 * 60 * 60 * 1000, '2h': 2 * 60 * 60 * 1000,
                         '4h': 4 * 60 * 60 * 1000,
@@ -481,6 +503,13 @@ class Candle_Sticks_Ticker:
         info = save_obj.load(name, self.id)
         self.restore(info)
 
+    def record_feedback(self,feedback_obj=None):
+        if feedback_obj==None:
+            self.save_feedback=False
+        else:
+            self.save_feedback=True
+            self.feed=feedback_obj
+
     def run(self):
 
         self.feedback = {}
@@ -515,9 +544,11 @@ class Candle_Sticks_Ticker:
 
                     while(True):
 
-                        info=eval(f'{option}.GetCandleStickDataOHLCV({symbol},{interval},{int(from_when)},{int(till_when)})')
-
                         try:
+
+                            info=eval(f'{option}.GetCandleStickDataOHLCV({symbol},{interval},{int(from_when)},{int(till_when)})')
+
+
                             df = info[f'{symbol[0]}_{interval[0]}']
                             prev_time[option][symbol[0]]=df['time'][0]
                             now_time[option][symbol[0]]=df['time'][1]
@@ -566,11 +597,15 @@ class Candle_Sticks_Ticker:
             time.sleep(self.tick_rate)
             loop_took = time.time() - last_time
             self.feedback.update({'loop_took': loop_took})
+
+            if self.save_feedback==True:
+                self.feed.push(self.feedback)
+
             if self._yield_ == False:
                 break
-            yield self.info_,self.feedback
+            yield self.info_
 
-        return self.info_,self.feedback
+        return self.info_
 
 #####################################################################################################################
 
@@ -608,6 +643,7 @@ class Trend_Lines:
         }
 
 class Price_Levels:
+
     def __init__(self):
         self.id=f'price_level_{__id__()}'
         self.Y_price=0
@@ -681,8 +717,11 @@ class Save_Load_Data:
     def __init__(self,folder_path,name):
 
         self.file_name=name
+        self.folder_path=folder_path
         self.file_info=None
-        self.file_path=os.path.join(folder_path,self.file_name)
+        self.file_path=os.path.join(self.folder_path,self.file_name)
+        if os.path.exists(self.file_path)==False:
+            os.makedirs(self.file_path)
         self.dir_info=os.path.join(self.file_path,r'dir_info.txt')
 
     def id_parser(self,id):
@@ -759,7 +798,7 @@ class Candle_Sticks_Manager:
 
         for option in candle_sticks:
             folder=os.path.join(save_load_obj.file_path,option)
-            if os.path.exists(folder)!=True:
+            if os.path.exists(folder)==False:
                 os.mkdir(folder)
             for symbol in candle_sticks[option]:
                 symbol_file=os.path.join(folder,f'{symbol}_{self.options[option][symbol]}.txt')
@@ -774,6 +813,23 @@ class Candle_Sticks_Manager:
     def __load__(self,save_load_obj):
 
         pass
+
+    def record_ticks(self,candle_stick_ticks,save_load_obj):
+        isinstance(save_load_obj,Save_Load_Data)
+        for option in candle_stick_ticks:
+            for symbol in candle_stick_ticks[option]:
+                candle_stick=candle_stick_ticks[option][symbol]
+                isinstance(candle_stick,Candle_Sticks)
+                status=candle_stick.status
+                interval=candle_stick.interval
+                if status=='complete':
+                    folder = os.path.join(save_load_obj.file_path, option)
+                    if os.path.exists(folder) == False:
+                        os.mkdir(folder)
+
+                    symbol_file = os.path.join(folder, f'{symbol}_{interval}.txt')
+                    with open(symbol_file, 'a') as file:
+                        file.write(f'{candle_stick.info()}\n')
 
     def download_and_save_candle_sticks(self,from_when,till_when,save_load_object):
 
@@ -831,6 +887,115 @@ class Candle_Sticks_Manager:
 
         return self.feedback
 
+class BUY_or_SELL:
+
+    def __init__(self,unique_name='none'):
+        self.id=__id__()
+        self.name=unique_name
+
+    def set(self,account_info_obj,place_order_obj,
+                manage_order_obj):
+
+        if isinstance(account_info_obj,Account_info) and isinstance(place_order_obj,Place_Order) and isinstance(manage_order_obj,Manage_Order):
+
+            self._acc_=account_info_obj
+            self._place_order_=place_order_obj
+            self._manage_order_=manage_order_obj
+
+        else:
+            print('ERROR AT BUY or SELL SET()')
+
+    def run(self,price_ticks,BUY_or_SELL,assetA_assetB,precision,quantity_in_percentage=0.5,price=None):
+
+        assetA_assetB_=assetA_assetB.split('_')
+
+        self.assetA_and_assetB=assetA_assetB_[0]+assetA_assetB_[1]
+        self.fraction=quantity_in_percentage
+
+        self.price={}
+
+        for option in self._place_order_.options:
+
+            i=price_ticks[option][self.assetA_and_assetB]
+            if isinstance(i,Candle_Sticks):
+                self.price.update({option:i.close})
+            elif isinstance(i,float):
+                self.price.update({option:i})
+            else:
+                print('ERROR_AT_BUY_or_SELL_CLASS')
+
+        quantity_A={}
+        quantity_B={}
+        quantity_A_to_buy={}
+        quantity_A_to_sell={}
+
+        acc_info=self._acc_.run()
+        for option in acc_info:
+
+            quantity_A.update({option:acc_info[option][assetA_assetB_[0]]})
+            quantity_B.update({option:acc_info[option][assetA_assetB_[1]]})
+            b=float(quantity_B[option])
+            a=float(quantity_A[option])
+            quantity_A_to_buy.update({option:(b * self.fraction)/self.price[option]})
+            quantity_A_to_sell.update({option:(a * self.fraction)})
 
 
+        if self._place_order_.trade_type=='market_order':
+
+            if BUY_or_SELL=='BUY':
+
+                order_info=self._place_order_.run(assetA_assetB,quantity_A_to_buy,'BUY',precision)
+
+            elif BUY_or_SELL=='SELL':
+
+                order_info=self._place_order_.run(assetA_assetB,quantity_A_to_sell,'SELL',precision)
+
+            else:
+                print('ERROR AT BUY or SELL')
+                order_info=None
+
+
+            time.sleep(2)
+            _order_= self._manage_order_.run_check_order(order_info)
+
+            _acc_info_ = self._acc_.run()
+        elif self._place_order_.trade_type=='limit_order':
+            order_info=None
+            _order_=None
+            _acc_info_ = self._acc_.run()
+        else:
+            order_info = None
+            _order_ = None
+            _acc_info_ = self._acc_.run()
+
+        return order_info,_order_,_acc_info_
+
+class Manage_Time_Ticker:
+
+    def __init__(self,unique_name='none'):
+        self.name=unique_name
+        self.id=f'manage_time_{__id__()}'
+        self.prev_loop_took=0
+
+    def set(self,feed_back_obj):
+        if isinstance(feed_back_obj,Feedback):
+            self.feed=feed_back_obj
+        else:
+            print('Error at manage_time_ticker.set()')
+
+    def run(self):
+        total_time=0
+        expected_time=0
+        for i in self.feed.spit():
+            total_time=total_time+i['loop_took']
+            try:
+                expected_time=expected_time+i['tick_rate']
+            except:
+                pass
+
+        loss=total_time-expected_time
+        time_diff=self.prev_loop_took-total_time
+        self.prev_loop_took=total_time
+
+        return time_diff,loss
 
