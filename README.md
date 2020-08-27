@@ -1,3 +1,3 @@
-# Crypto-Trading-Bot
+#  _Tr_Blitz_   Crypto-Trading-Bot
 Unfinished
 
