@@ -42,6 +42,7 @@ manage time etc with multiple exchanges and multiple assets.
            print(output)
       
 OUTPUT:
+
       _______________________________________________________
       {
          'HeyBinance' : {
@@ -54,7 +55,7 @@ OUTPUT:
       }
       ________________________________________________________
 
-* you can alse set the above tool if you want to avoid for loop
+* you can also set the above tool if you want to avoid for loop
       
       candle_stick_ticker_1.set(options = options , tick_rate = 4 ,yield = False)
       
@@ -67,6 +68,8 @@ OUTPUT:
           print(output)
                         |
                         |
+ OUTPUT:
+ 
        _______________________________________________________
       {
          'HeyBinance' : {
