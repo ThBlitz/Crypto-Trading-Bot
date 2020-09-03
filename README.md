@@ -40,6 +40,8 @@ manage time etc with multiple exchanges and multiple assets.
       
       for output in candle_stick_ticker_1.run():
            print(output)
+      
+OUTPUT:
       _______________________________________________________
       {
          'HeyBinance' : {
