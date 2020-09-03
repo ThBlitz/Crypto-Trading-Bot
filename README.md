@@ -27,9 +27,14 @@ manage time etc with multiple exchanges and multiple assets.
                     }
                  }
        
+       ## Create the ticker obj. This way you can create any number of tickers you want.
+       
        candle_stick_ticker_1 = blitz_trade_tools.Candle_Stick_Ticker()
        
+       ## .set() is used to give required settings for this tool. .set() is used for all the tools.
+       
        candle_stick_ticker_1.set(options = options , tick_rate = 4)
+       
        ## tick_rate = 4 , ticks every 4 seconds.
       
 * Here HeyBinance is to call binance API and RobinHood for Robinhood API
@@ -40,6 +45,7 @@ manage time etc with multiple exchanges and multiple assets.
       
       for output in candle_stick_ticker_1.run():
            print(output)
+           ## Iterate 24x7 for 4 seconds per iter. OR you can call it as ticks per second OR as tick_rate.
       
 OUTPUT:
 
@@ -61,13 +67,13 @@ OUTPUT:
       
       while(True):
           ## can be called inside any kind of loop. 
-                        |          
+                                 
                         |
                         
           output = candle_stick_ticker_1.run()
           print(output)
                         |
-                        |
+                        
  OUTPUT:
  
        _______________________________________________________
